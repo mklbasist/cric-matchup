@@ -61,6 +61,17 @@ def get_stats_route():
     stats = get_stats(format_type, batter, bowler)
     return jsonify(stats)
 
+import os
+
+@app.route("/list_json_files")
+def list_json_files():
+    try:
+        files = os.listdir(os.path.join(BASE_DIR, "data", "test_matches"))
+        return jsonify(files)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 if __name__ == "__main__":
     load_matches()
     print(f"Loaded {len(match_data)} matches")
