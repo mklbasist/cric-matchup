@@ -3,27 +3,26 @@ import os, glob, json
 
 app = Flask(__name__)
 
-# absolute path to reliably locate match JSON files in any environment
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MATCHES_PATH = os.path.join(BASE_DIR, "data", "test_matches", "*.json")
 
-# Store all players
 all_batters = set()
 all_bowlers = set()
 match_data = []
 
 def load_matches():
-    """Load all match JSON files and extract players + events."""
     global all_batters, all_bowlers, match_data
     print(f"Loading matches from: {MATCHES_PATH}")
     files = glob.glob(MATCHES_PATH)
-    print(f"Found {len(files)} match files")
+    print(f"Files found: {files}")
+    if not files:
+        print("ERROR: No JSON files found. Please check your deployment files.")
     for file in files:
-        with open(file, "r", encoding="utf-8") as f:
-            try:
+        try:
+            with open(file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 match_data.append(data)
-                # Traverse innings to extract batters/bowlers
+
                 for innings in data.get("innings", []):
                     for over in innings.get("overs", []):
                         for delivery in over.get("deliveries", []):
@@ -33,36 +32,10 @@ def load_matches():
                                 all_batters.add(batter)
                             if bowler:
                                 all_bowlers.add(bowler)
-            except Exception as e:
-                print(f"Error reading {file}: {e}")
+        except Exception as e:
+            print(f"Error reading {file}: {e}")
 
-def get_stats(format_type, batter, bowler):
-    """Calculate batter vs bowler stats across all matches."""
-    runs = 0
-    balls = 0
-    outs = 0
-    for data in match_data:
-        for innings in data.get("innings", []):
-            for over in innings.get("overs", []):
-                for delivery in over.get("deliveries", []):
-                    if delivery.get("batter") == batter and delivery.get("bowler") == bowler:
-                        balls += 1
-                        runs += delivery.get("runs", {}).get("batter", 0)
-                        # Check if wicket
-                        if "wickets" in delivery:
-                            for w in delivery["wickets"]:
-                                if w.get("kind") != "run out": # count bowler dismissals
-                                    outs += 1
-    strike_rate = (runs / balls * 100) if balls > 0 else 0
-    return {
-        "format": format_type,
-        "batter": batter,
-        "bowler": bowler,
-        "runs": runs,
-        "balls": balls,
-        "outs": outs,
-        "strike_rate": round(strike_rate, 2),
-    }
+# The rest of your app.py code remains the same...
 
 @app.route("/")
 def index():
