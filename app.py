@@ -15,6 +15,16 @@ def load_matches():
     print(f"Loading matches from: {MATCHES_PATH}")
     files = glob.glob(MATCHES_PATH)
     print(f"Files found: {len(files)}")
+    if not files:
+        print("ERROR: No JSON files found.")
+        return
+
+    first_file = files[0]
+    print(f"Inspecting first file: {first_file}")
+    with open(first_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        print(f"Top-level keys in first file: {list(data.keys())}")
+
     for file in files:
         try:
             with open(file, "r", encoding="utf-8") as f:
@@ -31,8 +41,10 @@ def load_matches():
                                 all_bowlers.add(bowler)
         except Exception as e:
             print(f"Error reading {file}: {e}")
+
     print(f"Total batters loaded: {len(all_batters)}")
     print(f"Total bowlers loaded: {len(all_bowlers)}")
+
 
 # The rest of your app.py code remains the same...
 
