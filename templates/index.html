@@ -1,170 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Cricket Stats</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
-    <style>
-        body {
-            background-image: url("{{ url_for('static', filename='images.jpg') }}");
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-            background-attachment: fixed;
-            color: white;
-            min-height: 100vh;
-        }
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: -1;
-        }
-        .container {
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 30px;
-        }
-    </style>
-    <script>
+    <meta charset="UTF-8">
+    <title>Cric Matchup</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+</head>
+<body style="background:#222; color:white; padding:20px;">
+
+<div class="container">
+    <h1 class="text-center">Cric Matchup</h1>
+
+    <div class="form-group">
+        <label for="format">Select Format:</label>
+        <select id="format" class="form-control">
+            <option value="Tests">Tests</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="batters_input">Select Batter:</label>
+        <input list="batters_list" id="batters_input" class="form-control" oninput="search('batters')" autocomplete="off">
+        <datalist id="batters_list"></datalist>
+    </div>
+
+    <div class="form-group">
+        <label for="bowlers_input">Select Bowler:</label>
+        <input list="bowlers_list" id="bowlers_input" class="form-control" oninput="search('bowlers')" autocomplete="off">
+        <datalist id="bowlers_list"></datalist>
+    </div>
+
+    <button class="btn btn-primary" onclick="getStats()">Get Stats</button>
+
+    <table class="table table-bordered" id="stats_table" style="display:none; margin-top:20px; color: white;">
+        <thead>
+            <tr>
+                <th>Format</th>
+                <th>Batter</th>
+                <th>Bowler</th>
+                <th>Runs</th>
+                <th>Balls</th>
+                <th>Outs</th>
+                <th>Average</th>
+                <th>Strike Rate</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td id="format_cell"></td>
+                <td id="batter_cell"></td>
+                <td id="bowler_cell"></td>
+                <td id="runs_cell"></td>
+                <td id="balls_cell"></td>
+                <td id="outs_cell"></td>
+                <td id="average_cell"></td>
+                <td id="sr_cell"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <footer style="text-align:center; padding:10px; margin-top:30px;">
+        &copy; 2025 Mukul. All rights reserved.
+    </footer>
+</div>
+
+<script>
     async function search(type) {
-        let input = document.getElementById(type + '_input');
-        let query = input.value;
-
-        if (query.length < 1) {
-            document.getElementById(type + '_list').innerHTML = '';
-            return;
-        }
-
-        let response = await fetch(`/search_${type}?query=${query}`);
-        let data = await response.json();
-
-        let list = document.getElementById(type + '_list');
-        list.innerHTML = '';
+        const query = document.getElementById(type + "_input").value;
+        if (query.length === 0) return;
+        const res = await fetch(`/${"search_" + type}?query=${query}`);
+        const data = await res.json();
+        const list = document.getElementById(type + "_list");
+        list.innerHTML = "";
         data.forEach(item => {
-            let option = document.createElement('option');
+            const option = document.createElement("option");
             option.value = item;
             list.appendChild(option);
         });
     }
 
     async function getStats() {
-        let format = document.getElementById('format').value;
-        let batter = document.getElementById('batters_input').value;
-        let bowler = document.getElementById('bowlers_input').value;
+        const format = document.getElementById("format").value;
+        const batter = document.getElementById("batters_input").value;
+        const bowler = document.getElementById("bowlers_input").value;
 
-        let formData = new FormData();
-        formData.append('format', format);
-        formData.append('batter', batter);
-        formData.append('bowler', bowler);
+        const res = await fetch("/get_stats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ format, batter, bowler })
+        });
+        const data = await res.json();
 
-        let response = await fetch('/get_stats', {method: 'POST', body: formData});
-        let stats = await response.json();
-
-        let average = stats.outs > 0 ? (stats.runs / stats.outs).toFixed(2) : "N/A";
-
-        document.getElementById('format_cell').innerText = stats.format;
-        document.getElementById('batter_cell').innerText = stats.batter;
-        document.getElementById('bowler_cell').innerText = stats.bowler;
-        document.getElementById('runs_cell').innerText = stats.runs;
-        document.getElementById('balls_cell').innerText = stats.balls;
-        document.getElementById('outs_cell').innerText = stats.outs;
-        document.getElementById('average_cell').innerText = average;
-        document.getElementById('sr_cell').innerText = stats.strike_rate;
-
-        document.getElementById('stats_table').style.display = 'table';
+        document.getElementById("stats_table").style.display = "table";
+        document.getElementById("format_cell").textContent = data.format;
+        document.getElementById("batter_cell").textContent = data.batter;
+        document.getElementById("bowler_cell").textContent = data.bowler;
+        document.getElementById("runs_cell").textContent = data.runs;
+        document.getElementById("balls_cell").textContent = data.balls;
+        document.getElementById("outs_cell").textContent = data.outs;
+        document.getElementById("average_cell").textContent = data.average;
+        document.getElementById("sr_cell").textContent = data.strike_rate;
     }
-
-    function showMatchup() {
-        document.getElementById('welcome_page').style.display = 'none';
-        document.getElementById('matchup_page').style.display = 'block';
-    }
-    </script>
-</head>
-<body>
-    <!-- Welcome Page -->
-    <div id="welcome_page" style="
-    height: 100vh;
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-    background-image: url('{{ url_for('static', filename='3468657.jpg') }}');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-    color: white; 
-    flex-direction: column;
-    text-shadow: 1px 1px 4px rgba(0,0,0,0.7);
-    padding: 20px;
-">
-    <h1 style="margin-bottom: 20px;">Welcome to Cricket Stats</h1>
-    <button class="btn btn-primary btn-lg" 
-            style="box-shadow: 2px 2px 6px rgba(0,0,0,0.7);" 
-            onclick="showMatchup()">Enter</button>
-</div>
-
-    <!-- Hidden Matchup Stats Page -->
-    <div id="matchup_page" style="display:none;">
-        <div class="container">
-            <h1 style="text-align: center; font-size: 3rem; font-weight: bold; margin-bottom: 30px; color: white; text-decoration: underline;">
-                Cricket Matchup
-            </h1>
-
-            <h2>Cricket Batter vs Bowler Stats</h2>
-
-            <div class="form-group">
-                <label for="format">Select Format:</label>
-                <select id="format" class="form-control">
-                    <option value="Tests">Tests</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="batters_input">Select Batter:</label>
-                <input list="batters_list" id="batters_input" class="form-control" oninput="search('batters')" autocomplete="off">
-                <datalist id="batters_list"></datalist>
-            </div>
-
-            <div class="form-group">
-                <label for="bowlers_input">Select Bowler:</label>
-                <input list="bowlers_list" id="bowlers_input" class="form-control" oninput="search('bowlers')" autocomplete="off">
-                <datalist id="bowlers_list"></datalist>
-            </div>
-
-            <button class="btn btn-primary" onclick="getStats()">Get Stats</button>
-
-            <table class="table table-bordered" id="stats_table" style="display:none; margin-top:20px; color: white;">
-                <thead>
-                    <tr>
-                        <th>Format</th>
-                        <th>Batter</th>
-                        <th>Bowler</th>
-                        <th>Runs</th>
-                        <th>Balls</th>
-                        <th>Outs</th>
-                        <th>Average</th>
-                        <th>Strike Rate</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td id="format_cell"></td>
-                        <td id="batter_cell"></td>
-                        <td id="bowler_cell"></td>
-                        <td id="runs_cell"></td>
-                        <td id="balls_cell"></td>
-                        <td id="outs_cell"></td>
-                        <td id="average_cell"></td>
-                        <td id="sr_cell"></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <footer style="text-align:center; padding:10px; color: white; margin-top: 30px;">
-            &copy; 2025 Mukul. All rights reserved.
-        </footer>
-    </div>
+</script>
 </body>
 </html>
