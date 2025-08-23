@@ -57,21 +57,37 @@
 </div>
 
 <!-- Matchup Stats Page -->
-<div id="matchup_page" class="container">
-    <h1 class="text-center">Cric Matchup</h1>
+<div id="matchup_page" style="
+    display:none;
+    min-height:100vh;
+    background-image: url('{{ url_for('static', filename='cricw.jpg') }}');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: white;
+    position: relative;
+    padding: 20px;
+">
 
-     <!-- Example image -->
-    <div class="text-center">
-        <img src="{{ url_for('static', filename='cricw.jpg') }}" alt="cricw" style="width:150px; margin-bottom:20px;">
-    </div>
+    <!-- Optional overlay for readability -->
+    <div style="
+        position: absolute;
+        top:0; left:0; right:0; bottom:0;
+        background: rgba(0,0,0,0.5);
+        z-index: 0;
+    "></div>
 
-    <div class="form-group">
-        <label for="format">Select Format:</label>
-        <select id="format" class="form-control">
-            <option value="Tests">Tests</option>
-        </select>
-    </div>
+    <!-- Content on top of overlay -->
+    <div style="position: relative; z-index: 1;">
+        <h1 class="text-center">Cric Matchup</h1>
 
+        <div class="form-group">
+            <label for="format">Select Format:</label>
+            <select id="format" class="form-control">
+                <option value="Tests">Tests</option>
+            </select>
+        </div>
+        
     <div class="form-group">
         <label for="batters_input">Select Batter:</label>
         <input list="batters_list" id="batters_input" class="form-control" oninput="search('batters')" autocomplete="off">
