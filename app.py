@@ -1,60 +1,144 @@
 from flask import Flask, render_template, request, jsonify
-import os, glob, json
+import os, glob, json, sqlite3
 
 app = Flask(__name__)
 
-# Path to match JSON files (adjust if folder name differs)
+# Folders/paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MATCHES_PATH = os.path.join(BASE_DIR, "data", "test_matches", "*.json")
-
-all_batters = set()
-all_bowlers = set()
-match_data = []
+DATA_DIR = os.path.join(BASE_DIR, "data", "test_matches")  # your JSONs already live here
+DB_PATH = os.path.join(BASE_DIR, "matches.db")             # SQLite file we’ll build on boot
 
 
-def load_matches():
-    """Load all match JSON files and extract players + events."""
-    global all_batters, all_bowlers, match_data
-    print(f"Loading matches from: {MATCHES_PATH}")
-    files = glob.glob(MATCHES_PATH)
-    print(f"Found {len(files)} match files")
-    for file in files:
-        with open(file, "r", encoding="utf-8") as f:
-            try:
+# ---------- DB BUILD (runs once on boot) ----------
+def build_db_if_missing():
+    # If DB already exists (and non-empty), reuse it
+    if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
+        print(f"[DB] Using existing DB: {DB_PATH}")
+        return
+
+    print(f"[DB] Building SQLite DB at: {DB_PATH}")
+    print(f"[DB] Reading JSON from: {DATA_DIR}")
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    # light perf tweaks; safe on Render free
+    cur.execute("PRAGMA journal_mode = WAL;")
+    cur.execute("PRAGMA synchronous = NORMAL;")
+    cur.execute("PRAGMA temp_store = MEMORY;")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS deliveries (
+        match_id     TEXT,
+        inning       INTEGER,
+        over         INTEGER,
+        ball         INTEGER,
+        batter       TEXT,
+        bowler       TEXT,
+        runs         INTEGER,
+        wicket_kind  TEXT
+    )
+    """)
+
+    files = glob.glob(os.path.join(DATA_DIR, "*.json"))
+    print(f"[DB] Found {len(files)} JSON files.")
+
+    insert_sql = "INSERT INTO deliveries VALUES (?,?,?,?,?,?,?,?)"
+    batch, batch_size, total_rows = [], 2000, 0
+
+    for idx, path in enumerate(files, start=1):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                match_data.append(data)
-                # Extract batters/bowlers
-                for innings in data.get("innings", []):
-                    for over in innings.get("overs", []):
-                        for delivery in over.get("deliveries", []):
-                            batter = delivery.get("batter")
-                            bowler = delivery.get("bowler")
-                            if batter:
-                                all_batters.add(batter)
-                            if bowler:
-                                all_bowlers.add(bowler)
-            except Exception as e:
-                print(f"Error reading {file}: {e}")
+        except Exception as e:
+            print(f"[DB] Skipping {path}: {e}")
+            continue
 
+        match_id = (data.get("meta", {}) or {}).get("match", os.path.basename(path))
 
-def get_stats(format_type, batter, bowler):
-    """Calculate batter vs bowler stats across all matches."""
-    runs = 0
-    balls = 0
-    outs = 0
-    for data in match_data:
-        for innings in data.get("innings", []):
+        for inning_idx, innings in enumerate(data.get("innings", []), start=1):
             for over in innings.get("overs", []):
-                for delivery in over.get("deliveries", []):
-                    if delivery.get("batter") == batter and delivery.get("bowler") == bowler:
-                        balls += 1
-                        runs += delivery.get("runs", {}).get("batter", 0)
-                        if "wickets" in delivery:
-                            for w in delivery["wickets"]:
-                                if w.get("kind") != "run out":
-                                    outs += 1
-    strike_rate = (runs / balls * 100) if balls > 0 else 0
-    average = (runs / outs) if outs > 0 else "NA"
+                over_no = over.get("over")
+                # deliveries is a list; assign ball numbers 1..n within the over
+                for ball_idx, delivery in enumerate(over.get("deliveries", []), start=1):
+                    batter = delivery.get("batter")
+                    bowler = delivery.get("bowler")
+                    runs = (delivery.get("runs", {}) or {}).get("batter", 0)
+
+                    wicket_kind = None
+                    if "wickets" in delivery:
+                        for w in delivery["wickets"]:
+                            if w.get("kind") != "run out":
+                                wicket_kind = w.get("kind")
+                                break
+
+                    batch.append((match_id, inning_idx, over_no, ball_idx,
+                                  batter, bowler, runs, wicket_kind))
+
+                    if len(batch) >= batch_size:
+                        cur.executemany(insert_sql, batch)
+                        conn.commit()
+                        total_rows += len(batch)
+                        batch.clear()
+
+        if idx % 10 == 0:
+            print(f"[DB] Processed {idx}/{len(files)} files; rows so far: {total_rows}")
+
+    if batch:
+        cur.executemany(insert_sql, batch)
+        conn.commit()
+        total_rows += len(batch)
+
+    # Helpful indexes for fast lookups
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batter ON deliveries(batter)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bowler ON deliveries(bowler)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_batter_bowler ON deliveries(batter, bowler)")
+    conn.commit()
+    conn.close()
+    print(f"[DB] Build complete. Rows inserted: {total_rows}")
+
+
+# ---------- QUERY HELPERS ----------
+def search_players(role, query):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    if role == "batter":
+        cur.execute("""
+            SELECT DISTINCT batter
+            FROM deliveries
+            WHERE batter LIKE ? COLLATE NOCASE
+            ORDER BY batter
+            LIMIT 20
+        """, (query + "%",))
+    else:
+        cur.execute("""
+            SELECT DISTINCT bowler
+            FROM deliveries
+            WHERE bowler LIKE ? COLLATE NOCASE
+            ORDER BY bowler
+            LIMIT 20
+        """, (query + "%",))
+    results = [r[0] for r in cur.fetchall() if r[0]]
+    conn.close()
+    return results
+
+
+def compute_stats(format_type, batter, bowler):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            COALESCE(SUM(runs), 0) AS runs,
+            COUNT(*)                 AS balls,
+            SUM(CASE WHEN wicket_kind IS NOT NULL THEN 1 ELSE 0 END) AS outs
+        FROM deliveries
+        WHERE batter = ? AND bowler = ?
+    """, (batter, bowler))
+    runs, balls, outs = cur.fetchone()
+    conn.close()
+
+    sr = round((runs / balls * 100), 2) if balls else 0.0
+    avg = round((runs / outs), 2) if outs else runs
+
     return {
         "format": format_type,
         "batter": batter,
@@ -62,43 +146,37 @@ def get_stats(format_type, batter, bowler):
         "runs": runs,
         "balls": balls,
         "outs": outs,
-        "average": average,
-        "strike_rate": round(strike_rate, 2),
+        "average": avg,
+        "strike_rate": sr,
     }
 
 
+# ---------- ROUTES ----------
 @app.route("/")
 def index():
     return render_template("index.html")
 
-
 @app.route("/search_batters")
 def search_batters():
-    query = request.args.get("query", "").lower()
-    filtered = [b for b in sorted(all_batters) if b.lower().startswith(query)]
-    return jsonify(filtered)
-
+    q = request.args.get("query", "")
+    return jsonify(search_players("batter", q))
 
 @app.route("/search_bowlers")
 def search_bowlers():
-    query = request.args.get("query", "").lower()
-    filtered = [b for b in sorted(all_bowlers) if b.lower().startswith(query)]
-    return jsonify(filtered)
-
+    q = request.args.get("query", "")
+    return jsonify(search_players("bowler", q))
 
 @app.route("/get_stats", methods=["POST"])
 def get_stats_route():
     data = request.get_json() or request.form
-    format_type = data.get("format")
+    format_type = data.get("format", "Tests")
     batter = data.get("batter")
     bowler = data.get("bowler")
-    stats = get_stats(format_type, batter, bowler)
-    return jsonify(stats)
+    return jsonify(compute_stats(format_type, batter, bowler))
 
 
-# Always load matches on startup (important for Render)
-load_matches()
-print(f"Loaded {len(match_data)} matches")
+# Build the DB (streamed, low-RAM). Safe on Render free tier.
+build_db_if_missing()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
