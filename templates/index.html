@@ -18,7 +18,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background-image: url("{{ url_for('static', filename='3468657.jpg') }}");
+            background-image: url("{{ url_for('static', filename='cricw2.jpg') }}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -26,9 +26,21 @@
             text-align: center;
             text-shadow: 1px 1px 4px rgba(0,0,0,0.7);
             color: white;
+            font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; /* added */
         }
 
+       #welcome_page h1 {
+    font-weight: bold;
+    color: white; /* Text fill color */
+    -webkit-text-stroke: 0.7px black; /* Stroke width and color */
+    text-stroke: 1px black; /* Standard property for future support */
+}
+
         #welcome_page button {
+            background-color: white;
+            color: black;
+            border: 2px solid black;
+            font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
             box-shadow: 2px 2px 6px rgba(0,0,0,0.7);
         }
 
