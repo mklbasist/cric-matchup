@@ -105,18 +105,18 @@ def search_players(role, query):
         cur.execute("""
             SELECT DISTINCT batter
             FROM deliveries
-            WHERE batter LIKE ? COLLATE NOCASE
+            WHERE batter LIKE '%' || ? || '%' COLLATE NOCASE
             ORDER BY batter
             LIMIT 20
-        """, (query + "%",))
+        """, (query,))
     else:
         cur.execute("""
             SELECT DISTINCT bowler
             FROM deliveries
-            WHERE bowler LIKE ? COLLATE NOCASE
+            WHERE bowler LIKE '%' || ? || '%' COLLATE NOCASE
             ORDER BY bowler
             LIMIT 20
-        """, (query + "%",))
+        """, (query,))
     results = [r[0] for r in cur.fetchall() if r[0]]
     conn.close()
     return results
