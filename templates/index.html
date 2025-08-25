@@ -158,7 +158,7 @@
 
     async function search(type) {
         const query = document.getElementById(type + "_input").value;
-        if (!query) return;
+        // Always send the query, even if it's a partial name
         const res = await fetch(`/${"search_" + type}?query=${query}`);
         const data = await res.json();
         const list = document.getElementById(type + "_list");
