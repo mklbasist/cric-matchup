@@ -1,7 +1,11 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 import os, glob, json, sqlite3
 
 app = Flask(__name__)
+
+# ✅ Only allow API access from your GitHub Pages site
+CORS(app, origins=["https://mklbasist.github.io"])
 
 # Folders/paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
