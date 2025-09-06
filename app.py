@@ -174,9 +174,43 @@ def search_bowlers():
 def get_stats_route():
     data = request.get_json() or request.form
     format_type = data.get("format", "Tests")
-    batter = data.get("batter")
-    bowler = data.get("bowler")
-    return jsonify(compute_stats(format_type, batter, bowler))
+    batter_input = (data.get("batter") or "").strip()
+    bowler_input = (data.get("bowler") or "").strip()
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Resolve batter (first match for partial search)
+    cur.execute("""
+        SELECT DISTINCT batter
+        FROM deliveries
+        WHERE batter LIKE '%' || ? || '%' COLLATE NOCASE
+        ORDER BY batter
+        LIMIT 1
+    """, (batter_input,))
+    row = cur.fetchone()
+    batter_name = row[0] if row else None
+
+    # Resolve bowler (first match for partial search)
+    cur.execute("""
+        SELECT DISTINCT bowler
+        FROM deliveries
+        WHERE bowler LIKE '%' || ? || '%' COLLATE NOCASE
+        ORDER BY bowler
+        LIMIT 1
+    """, (bowler_input,))
+    row = cur.fetchone()
+    bowler_name = row[0] if row else None
+
+    conn.close()
+
+    if not batter_name or not bowler_name:
+        return jsonify({"error": "No matching batter/bowler found"}), 404
+
+    stats = compute_stats(format_type, batter_name, bowler_name)
+    stats["batterName"] = batter_name
+    stats["bowlerName"] = bowler_name
+    return jsonify(stats)
 
 
 # Build the DB (streamed, low-RAM). Safe on Render free tier.
