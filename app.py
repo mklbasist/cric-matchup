@@ -5,7 +5,10 @@ import os, glob, json, sqlite3
 app = Flask(__name__)
 
 # ✅ Only allow API access from your GitHub Pages site
-CORS(app, origins=["https://mklbasist.github.io"])
+CORS(app, origins=[
+    "https://mklbasist.github.io",
+    "https://streamxcric.vercel.app",
+])
 
 # Folders/paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
