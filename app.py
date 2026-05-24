@@ -12,13 +12,12 @@ CORS(app, origins=[
 
 # Folders/paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data", "test_matches")  # your JSONs already live here
-DB_PATH = os.path.join(BASE_DIR, "matches.db")             # SQLite file we’ll build on boot
+DATA_DIR = os.path.join(BASE_DIR, "data", "test_matches")
+DB_PATH = os.path.join(BASE_DIR, "matches.db")
 
 
 # ---------- DB BUILD (runs once on boot) ----------
 def build_db_if_missing():
-    # If DB already exists (and non-empty), reuse it
     if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
         print(f"[DB] Using existing DB: {DB_PATH}")
         return
@@ -28,7 +27,6 @@ def build_db_if_missing():
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    # light perf tweaks; safe on Render free
     cur.execute("PRAGMA journal_mode = WAL;")
     cur.execute("PRAGMA synchronous = NORMAL;")
     cur.execute("PRAGMA temp_store = MEMORY;")
@@ -65,7 +63,6 @@ def build_db_if_missing():
         for inning_idx, innings in enumerate(data.get("innings", []), start=1):
             for over in innings.get("overs", []):
                 over_no = over.get("over")
-                # deliveries is a list; assign ball numbers 1..n within the over
                 for ball_idx, delivery in enumerate(over.get("deliveries", []), start=1):
                     batter = delivery.get("batter")
                     bowler = delivery.get("bowler")
@@ -95,7 +92,6 @@ def build_db_if_missing():
         conn.commit()
         total_rows += len(batch)
 
-    # Helpful indexes for fast lookups
     cur.execute("CREATE INDEX IF NOT EXISTS idx_batter ON deliveries(batter)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bowler ON deliveries(bowler)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_batter_bowler ON deliveries(batter, bowler)")
@@ -158,12 +154,13 @@ def compute_stats(format_type, batter, bowler):
     }
 
 
-# ---------- MATCHUP CACHE ----------
+# ---------- LAZY GRAPH CACHE ----------
 matchup_cache = {}
+cache_built = False
 
 def build_matchup_cache():
-    """Build cache of all batter-bowler matchups on startup"""
-    global matchup_cache
+    """Build cache of all batter-bowler matchups on first graph request"""
+    global matchup_cache, cache_built
     print("[CACHE] Building matchup cache...")
     files = glob.glob(os.path.join(DATA_DIR, "*.json"))
     
@@ -194,7 +191,14 @@ def build_matchup_cache():
         if idx % 100 == 0:
             print(f"[CACHE] Processed {idx}/{len(files)} files")
     
+    cache_built = True
     print(f"[CACHE] Complete! Cached {len(matchup_cache)} matchups")
+
+def ensure_graph_cache():
+    """Ensure cache is built before graph request"""
+    global cache_built
+    if not cache_built:
+        build_matchup_cache()
 
 
 # ---------- ROUTES ----------
@@ -249,7 +253,9 @@ def get_stats_route():
 
 @app.route("/matchup_graph/<batter>/<bowler>")
 def matchup_graph(batter, bowler):
-    """Return cached match data"""
+    """Return cached match data for graphs"""
+    ensure_graph_cache()  # Build cache on first request
+    
     key = f"{batter}_{bowler}"
     matches_data = matchup_cache.get(key, [])
     
@@ -262,16 +268,12 @@ def matchup_graph(batter, bowler):
 
 @app.route("/health")
 def health():
-    """Health check endpoint - triggers cache if needed"""
-    if not matchup_cache:
-        build_matchup_cache()
+    """Health check endpoint"""
+    ensure_graph_cache()  # Ensure cache is ready
     return jsonify({"status": "ok", "cached_matchups": len(matchup_cache)})
 
 
-# Build cache on startup
-build_matchup_cache()
-
-# Build the DB (streamed, low-RAM). Safe on Render free tier.
+# Build the DB on startup
 build_db_if_missing()
 
 if __name__ == "__main__":
