@@ -255,6 +255,15 @@ def matchup_graph(batter, bowler):
         "matches": matches_data
     })
 
+@app.route("/health")
+def health():
+    """Health check endpoint - triggers cache if needed"""
+    if not matchup_cache:
+        build_matchup_cache()
+    return jsonify({"status": "ok", "cached_matchups": len(matchup_cache)})
+
+# Build cache on startup
+build_matchup_cache()
 
 # Build the DB (streamed, low-RAM). Safe on Render free tier.
 build_db_if_missing()
