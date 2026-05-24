@@ -224,7 +224,16 @@ def matchup_graph(batter, bowler):
         except:
             continue
         
-        # Check if batter and bowler are in this match
+        # Quick check: see if batter/bowler are in players list first
+        players = data.get("info", {}).get("players", {})
+        all_players = []
+        for team_players in players.values():
+            all_players.extend(team_players)
+        
+        if batter not in all_players or bowler not in all_players:
+            continue
+        
+        # Only then check deliveries
         found = False
         for innings in data.get("innings", []):
             for over in innings.get("overs", []):
@@ -232,6 +241,8 @@ def matchup_graph(batter, bowler):
                     if delivery.get("batter") == batter and delivery.get("bowler") == bowler:
                         found = True
                         break
+                if found:
+                    break
             if found:
                 break
         
