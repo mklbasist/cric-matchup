@@ -179,10 +179,8 @@ def get_stats_route():
     format_type = data.get("format", "Tests")
     batter_input = (data.get("batter") or "").strip()
     bowler_input = (data.get("bowler") or "").strip()
-
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
     # Resolve batter (first match for partial search)
     cur.execute("""
         SELECT DISTINCT batter
@@ -193,7 +191,6 @@ def get_stats_route():
     """, (batter_input,))
     row = cur.fetchone()
     batter_name = row[0] if row else None
-
     # Resolve bowler (first match for partial search)
     cur.execute("""
         SELECT DISTINCT bowler
@@ -204,16 +201,48 @@ def get_stats_route():
     """, (bowler_input,))
     row = cur.fetchone()
     bowler_name = row[0] if row else None
-
     conn.close()
-
     if not batter_name or not bowler_name:
         return jsonify({"error": "No matching batter/bowler found"}), 404
-
     stats = compute_stats(format_type, batter_name, bowler_name)
     stats["batterName"] = batter_name
     stats["bowlerName"] = bowler_name
     return jsonify(stats)
+
+
+@app.route("/matchup_graph/<batter>/<bowler>")
+def matchup_graph(batter, bowler):
+    """Return raw match data for graphing year-wise stats"""
+    matches_data = []
+    
+    files = glob.glob(os.path.join(DATA_DIR, "*.json"))
+    
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except:
+            continue
+        
+        # Check if batter and bowler are in this match
+        found = False
+        for innings in data.get("innings", []):
+            for over in innings.get("overs", []):
+                for delivery in over.get("deliveries", []):
+                    if delivery.get("batter") == batter and delivery.get("bowler") == bowler:
+                        found = True
+                        break
+            if found:
+                break
+        
+        if found:
+            matches_data.append(data)
+    
+    return jsonify({
+        "batter": batter,
+        "bowler": bowler,
+        "matches": matches_data
+    })
 
 
 # Build the DB (streamed, low-RAM). Safe on Render free tier.
