@@ -265,14 +265,6 @@ def matchup_graph(batter, bowler):
         "matches": matches_data
     })
 
-
-@app.route("/health")
-def health():
-    """Health check endpoint"""
-    ensure_graph_cache()  # Ensure cache is ready
-    return jsonify({"status": "ok", "cached_matchups": len(matchup_cache)})
-
-
 # Build the DB on startup
 build_db_if_missing()
 
