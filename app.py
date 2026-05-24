@@ -158,6 +158,45 @@ def compute_stats(format_type, batter, bowler):
     }
 
 
+# ---------- MATCHUP CACHE ----------
+matchup_cache = {}
+
+def build_matchup_cache():
+    """Build cache of all batter-bowler matchups on startup"""
+    global matchup_cache
+    print("[CACHE] Building matchup cache...")
+    files = glob.glob(os.path.join(DATA_DIR, "*.json"))
+    
+    for idx, path in enumerate(files, start=1):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except:
+            continue
+        
+        players = data.get("info", {}).get("players", {})
+        all_players = []
+        for team_players in players.values():
+            all_players.extend(team_players)
+        
+        for innings in data.get("innings", []):
+            for over in innings.get("overs", []):
+                for delivery in over.get("deliveries", []):
+                    batter = delivery.get("batter")
+                    bowler = delivery.get("bowler")
+                    
+                    if batter and bowler:
+                        key = f"{batter}_{bowler}"
+                        if key not in matchup_cache:
+                            matchup_cache[key] = []
+                        matchup_cache[key].append(data)
+        
+        if idx % 100 == 0:
+            print(f"[CACHE] Processed {idx}/{len(files)} files")
+    
+    print(f"[CACHE] Complete! Cached {len(matchup_cache)} matchups")
+
+
 # ---------- ROUTES ----------
 @app.route("/")
 def index():
@@ -181,7 +220,6 @@ def get_stats_route():
     bowler_input = (data.get("bowler") or "").strip()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    # Resolve batter (first match for partial search)
     cur.execute("""
         SELECT DISTINCT batter
         FROM deliveries
@@ -191,7 +229,6 @@ def get_stats_route():
     """, (batter_input,))
     row = cur.fetchone()
     batter_name = row[0] if row else None
-    # Resolve bowler (first match for partial search)
     cur.execute("""
         SELECT DISTINCT bowler
         FROM deliveries
@@ -212,42 +249,9 @@ def get_stats_route():
 
 @app.route("/matchup_graph/<batter>/<bowler>")
 def matchup_graph(batter, bowler):
-    """Return raw match data for graphing year-wise stats"""
-    matches_data = []
-    
-    files = glob.glob(os.path.join(DATA_DIR, "*.json"))
-    
-    for path in files:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except:
-            continue
-        
-        # Quick check: see if batter/bowler are in players list first
-        players = data.get("info", {}).get("players", {})
-        all_players = []
-        for team_players in players.values():
-            all_players.extend(team_players)
-        
-        if batter not in all_players or bowler not in all_players:
-            continue
-        
-        # Only then check deliveries
-        found = False
-        for innings in data.get("innings", []):
-            for over in innings.get("overs", []):
-                for delivery in over.get("deliveries", []):
-                    if delivery.get("batter") == batter and delivery.get("bowler") == bowler:
-                        found = True
-                        break
-                if found:
-                    break
-            if found:
-                break
-        
-        if found:
-            matches_data.append(data)
+    """Return cached match data"""
+    key = f"{batter}_{bowler}"
+    matches_data = matchup_cache.get(key, [])
     
     return jsonify({
         "batter": batter,
@@ -255,12 +259,14 @@ def matchup_graph(batter, bowler):
         "matches": matches_data
     })
 
+
 @app.route("/health")
 def health():
     """Health check endpoint - triggers cache if needed"""
     if not matchup_cache:
         build_matchup_cache()
     return jsonify({"status": "ok", "cached_matchups": len(matchup_cache)})
+
 
 # Build cache on startup
 build_matchup_cache()
