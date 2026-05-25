@@ -144,7 +144,7 @@ def compute_stats(format_type, batter, bowler):
     conn.close()
 
     sr = round((runs / balls * 100), 2) if balls else 0.0
-    avg = round((runs / outs), 2) if outs > 0 else "-"
+    avg = round((runs / outs), 2) if outs > 0 else 0.0
 
     return {
         "format": format_type,
